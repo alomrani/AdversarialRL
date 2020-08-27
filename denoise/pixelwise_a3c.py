@@ -4,7 +4,6 @@ from __future__ import unicode_literals
 from __future__ import absolute_import
 from builtins import *  # NOQA
 from future import standard_library
-standard_library.install_aliases()  # NOQA
 
 import copy
 from logging import getLogger
@@ -18,13 +17,13 @@ from chainerrl.misc import async_
 from chainerrl.misc.batch_states import batch_states
 from chainerrl.misc import copy_param
 from chainerrl.recurrent import Recurrent
-from chainerrl.recurrent import RecurrentChainMixin
+# from chainerrl.recurrent import RecurrentChainMixin
 from chainerrl.recurrent import state_kept
 
 from chainerrl.agents.a3c import A3CModel
 import chainerrl
 from cached_property import cached_property
-
+standard_library.install_aliases()  # NOQA
 logger = getLogger(__name__)
 
 
@@ -32,19 +31,23 @@ logger = getLogger(__name__)
 @cached_property
 def myentropy(self):
     with chainer.force_backprop_mode():
-        return F.stack([- F.sum(self.all_prob * self.all_log_prob, axis=1)], axis=1)
+        return F.stack(
+            [
+                -F.sum(self.all_prob * self.all_log_prob, axis=1)
+            ], axis=1)
 #######################
 
 ###########################
+
+
 def mylog_prob(self, x):
     n_batch, n_actions, h, w = self.all_log_prob.shape
-    p_trans = F.transpose(self.all_log_prob, axes=(0,2,3,1))
-    p_trans = F.reshape(p_trans,(-1,n_actions))
-    x_reshape = F.reshape(x,(1,-1))[0]
-    selected_p = F.select_item(p_trans,x_reshape)
-    return F.reshape(selected_p, (n_batch,1,h,w))
+    p_trans = F.transpose(self.all_log_prob, axes=(0, 2, 3, 1))
+    p_trans = F.reshape(p_trans, (-1, n_actions))
+    x_reshape = F.reshape(x, (1, -1))[0]
+    selected_p = F.select_item(p_trans, x_reshape)
+    return F.reshape(selected_p, (n_batch, 1, h, w))
 ##########################
-
 
 
 class PixelWiseA3C(agent.AttributeSavingMixin, agent.AsyncAgent):
@@ -147,7 +150,7 @@ class PixelWiseA3C(agent.AttributeSavingMixin, agent.AsyncAgent):
                 _, vout = self.model.pi_and_v(statevar)
 #######################
             R = F.cast(vout.data, 'float32')
-            #R = float(vout.data)
+            # R = float(vout.data)
 #######################
 
         pi_loss = 0
@@ -169,7 +172,7 @@ class PixelWiseA3C(agent.AttributeSavingMixin, agent.AsyncAgent):
             # Log probability is increased proportionally to advantage
 ##############################
             pi_loss -= log_prob * F.cast(advantage.data, 'float32')
-            #pi_loss -= log_prob * float(advantage.data)
+            # pi_loss -= log_prob * float(advantage.data)
 ##############################
             # Entropy is maximized
             pi_loss -= self.beta * entropy
@@ -197,7 +200,7 @@ class PixelWiseA3C(agent.AttributeSavingMixin, agent.AsyncAgent):
             logger.debug('pi_loss:%s v_loss:%s', pi_loss.data, v_loss.data)
 
 ##########################
-        #total_loss = pi_loss + F.reshape(v_loss, pi_loss.data.shape)
+        # total_loss = pi_loss + F.reshape(v_loss, pi_loss.data.shape)
         total_loss = F.mean(pi_loss + F.reshape(v_loss, pi_loss.data.shape))
 ##########################
 
@@ -230,13 +233,13 @@ class PixelWiseA3C(agent.AttributeSavingMixin, agent.AsyncAgent):
         self.t_start = self.t
 
     def act_and_train(self, state, reward):
-#########################
-        #statevar = self.batch_states([state], np, self.phi)
-        statevar = chainer.cuda.to_gpu(state)
+        #########################
+        # statevar = self.batch_states([state], np, self.phi)
+        statevar = chainer.backend.to_gpu(state)
 
-        #self.past_rewards[self.t - 1] = reward
-        self.past_rewards[self.t - 1] = chainer.cuda.to_gpu(reward)
-##########################
+        # self.past_rewards[self.t - 1] = reward
+        self.past_rewards[self.t - 1] = chainer.backend.to_gpu(reward)
+        ##########################
 
         if self.t - self.t_start == self.t_max:
             self.update(statevar)
@@ -245,60 +248,60 @@ class PixelWiseA3C(agent.AttributeSavingMixin, agent.AsyncAgent):
         pout, vout = self.model.pi_and_v(statevar)
         action = pout.sample().data  # Do not backprop through sampled actions
 ###############################
-        #self.past_action_log_prob[self.t] = pout.log_prob(action)
+        # self.past_action_log_prob[self.t] = pout.log_prob(action)
         self.past_action_log_prob[self.t] = pout.mylog_prob(action)
-        #self.past_action_entropy[self.t] = pout.entropy
+        # self.past_action_entropy[self.t] = pout.entropy
         self.past_action_entropy[self.t] = pout.myentropy
 #################################
         self.past_values[self.t] = vout
         self.t += 1
 #################################
-        #action = action[0]
+        # action = action[0]
 #################################
         if self.process_idx == 0:
             logger.debug('t:%s r:%s a:%s pout:%s',
                          self.t, reward, action, pout)
         # Update stats
-        #self.average_value += (
+        # self.average_value += (
         #    (1 - self.average_value_decay) *
         #    (F.cast(vout.data, 'float32') - self.average_value))
 #############################
-            #(float(vout.data[0]) - self.average_value))
+            # (float(vout.data[0]) - self.average_value))
 #############################
-        #self.average_entropy += (
+        # self.average_entropy += (
         #    (1 - self.average_entropy_decay) *
         #    (F.cast(pout.entropy.data, 'float32') - self.average_entropy))
 #############################
-            #(float(pout.entropy.data[0]) - self.average_entropy))
-        #return action
-        return chainer.cuda.to_cpu(action)
+            # (float(pout.entropy.data[0]) - self.average_entropy))
+        # return action
+        return chainer.backend.to_cpu(action)
 #############################
 
     def act(self, obs):
         # Use the process-local model for acting
         with chainer.no_backprop_mode():
-#########################
-            #statevar = self.batch_states([obs], np, self.phi)
-            statevar = chainer.cuda.to_gpu(obs)
+            #########################
+            # statevar = self.batch_states([obs], np, self.phi)
+            statevar = chainer.backend.to_gpu(obs)
             pout, _ = self.model.pi_and_v(statevar)
             if self.act_deterministically:
-                #return pout.most_probable.data[0]
-                return chainer.cuda.to_cpu(pout.most_probable.data)
+                # return pout.most_probable.data[0]
+                return chainer.backend.to_cpu(pout.most_probable.data)
             else:
-                #return pout.sample().data[0]
-                return chainer.cuda.to_cpu(pout.sample().data)
+                # return pout.sample().data[0]
+                return chainer.backend.to_cpu(pout.sample().data)
 #########################
 
     def stop_episode_and_train(self, state, reward, done=False):
-#########################
-        #self.past_rewards[self.t - 1] = reward
-        self.past_rewards[self.t - 1] = chainer.cuda.to_gpu(reward)
+        #########################
+        # self.past_rewards[self.t - 1] = reward
+        self.past_rewards[self.t - 1] = chainer.backend.to_gpu(reward)
         if done:
             self.update(None)
         else:
-            #statevar = self.batch_states([state], np, self.phi)
-            statevar = chainer.cuda.to_gpu(state)
-########################
+            # statevar = self.batch_states([state], np, self.phi)
+            statevar = chainer.backend.to_gpu(state)
+            ########################
             self.update(statevar)
 
         if isinstance(self.model, Recurrent):
@@ -318,4 +321,3 @@ class PixelWiseA3C(agent.AttributeSavingMixin, agent.AsyncAgent):
             ('average_value', self.average_value),
             ('average_entropy', self.average_entropy),
         ]
-
