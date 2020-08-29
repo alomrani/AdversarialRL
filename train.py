@@ -12,7 +12,7 @@ import torchvision
 # import torch.nn.functional as F
 # import torch.optim as optim
 from torch.autograd import Variable
-
+import matplotlib.pyplot as plt
 from tensorboardX import SummaryWriter
 
 from env import Env
@@ -81,12 +81,12 @@ def train():
     parameters_wo_p = [value for key, value in dict(model.module.named_parameters()).items() if '_p.' not in key]
     optimizer = torch.optim.Adam(parameters_wo_p, config.base_lr)
 
-    parameters_p = [value for key, value in dict(model.module.named_parameters()).items() if '_p.' in key]
+    # parameters_p = [value for key, value in dict(model.module.named_parameters()).items() if '_p.' in key]
     # parameters_pi = [value for key, value in dict(model.module.named_parameters()).items() if '_pi.' in key]
-    params = [
-        {'params': parameters_p, 'lr': config.base_lr},
-    ]
-    optimizer_p = torch.optim.SGD(params, config.base_lr)
+    # params = [
+    #     {'params': parameters_p, 'lr': config.base_lr},
+    # ]
+    # optimizer_p = torch.optim.Adam(params, config.base_lr)
 
     # training
     flag_a2c = True  # if True, use a2c; if False, use ddpg
@@ -95,23 +95,22 @@ def train():
         for i, (ori_image, orig_class) in enumerate(train_loader):
             # adjust learning rate
             learning_rate = adjust_learning_rate(optimizer, episodes, config.base_lr, policy=config.lr_policy, policy_parameter=config.policy_parameter)
-            _ = adjust_learning_rate(optimizer_p, episodes, config.base_lr, policy=config.lr_policy, policy_parameter=config.policy_parameter)
-
-            image = ori_image.numpy()
+            # _ = adjust_learning_rate(optimizer_p, episodes, config.base_lr, policy=config.lr_policy, policy_parameter=config.policy_parameter)
+            orig_class = orig_class.to("cuda")
+            image = ori_image
             # image = ori_image.numpy()
             env.reset(image=image, target_class=orig_class)
-            reward = np.zeros((1))
-
+            reward = torch.zeros((1))
             # forward
             if not flag_a2c:
                 v_out_dict = dict()
             for t in range(config.episode_len):
                 if torch.cuda.is_available():
-                    image_input = Variable(torch.from_numpy(image).cuda())
-                    reward_input = Variable(torch.from_numpy(reward).cuda())
+                    image_input = Variable(image.cuda())
+                    reward_input = Variable(reward.cuda())
                 else:
-                    image_input = Variable(torch.from_numpy(image))
-                    reward_input = Variable(torch.from_numpy(reward))
+                    image_input = Variable(image)
+                    reward_input = Variable(reward)
                 pi_out, v_out = model(image_input, flag_a2c, add_noise=flag_a2c)
                 if flag_a2c:
                     actions = a2c.act_and_train(pi_out, v_out, reward_input)
@@ -123,22 +122,22 @@ def train():
                 # env.set_param(p)
                 # previous_image = image
                 image, reward = env.step(actions)
-
                 if not(episodes % config.display):
                     print('\na2c: ', flag_a2c)
-                    print('episode {}: reward@{} = {:.4f}'.format(episodes, t, np.mean(reward)))
+                    print('episode {}: reward@{} = {:.4f}'.format(episodes, t, reward.mean()))
                     # for k, v in env.parameters.items():
                     #     print(k, ' parameters: ', v.mean())
                     # print("PSNR: {:.5f} -> {:.5f}".format(*computePSNR(ori_image[0, 0], previous_image[0, 0], image[0, 0])))
                     # print("SSIM: {:.5f} -> {:.5f}".format(*computeSSIM(ori_image[0, 0], previous_image[0, 0], image[0, 0])))
 
-                image = np.clip(image, 0, 1)
-
+                # image = np.clip(image, 0, 1)
+            # plt.imshow(image[0, 0, :, :], 'gray')
+            # plt.savefig('test.png')
             # compute loss and backpropagate
             if torch.cuda.is_available():
-                r = Variable(torch.from_numpy(reward).cuda())
+                r = Variable(reward.cuda())
             else:
-                r = Variable(torch.from_numpy(reward))
+                r = Variable(reward)
             if flag_a2c:
                 losses = a2c.stop_episode_and_compute_loss(reward=r, done=True)
                 loss = sum(losses.values()) / config.iter_size
@@ -152,17 +151,17 @@ def train():
                 print('episode {}: loss = {}'.format(episodes, float(loss.data)))
 
             # update model and write into tensorboard
-            if not(episodes % config.iter_size):
-                if flag_a2c:
-                    optimizer.step()
-                    optimizer.zero_grad()
-                    optimizer_p.zero_grad()
-                else:
-                    optimizer_p.step()
-                    optimizer_p.zero_grad()
-                    optimizer.zero_grad()
-                    for l in v_out_dict.keys():
-                        writer.add_scalar('v_out_{}'.format(l), float(v_out_dict[l].cpu().data.numpy()), episodes)
+            # if not(episodes % config.iter_size):
+            if flag_a2c:
+                optimizer.step()
+                optimizer.zero_grad()
+                # optimizer_p.zero_grad()
+            else:
+                # optimizer_p.step()
+                # optimizer_p.zero_grad()
+                optimizer.zero_grad()
+                for l in v_out_dict.keys():
+                    writer.add_scalar('v_out_{}'.format(l), float(v_out_dict[l].cpu().data.numpy()), episodes)
 
                 for l in losses.keys():
                     writer.add_scalar(l, float(losses[l].cpu().data.numpy()), episodes)

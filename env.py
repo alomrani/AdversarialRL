@@ -21,13 +21,14 @@ class Env():
         # self.set_param([0.5] * len(self.parameters_scale))
 
         self.reward_method = config.reward_method
-        model = mnist()
+        model = mnist(pretrained=True)
         model.eval()
         if torch.cuda.is_available():
             model.to('cuda')
         loss = torch.nn.CrossEntropyLoss()
         self.model = model
         self.loss = loss
+        self.base = None
         # self.preprocess = transforms.Compose([
         #                     transforms.RandomCrop(size=32, padding=4),
         #                     transforms.RandomHorizontalFlip(),
@@ -40,6 +41,8 @@ class Env():
 
     def reset(self, image, target_class):
         self.ori_image = image
+        with torch.no_grad():
+            self.base = self.model(self.ori_image.cuda()).softmax(1)
         self.image = image
         self.target = target_class
         self.previous_image = None
@@ -51,68 +54,76 @@ class Env():
         return
 
     def step(self, act):
-        self.previous_image = self.image.copy()
+        self.previous_image = self.image.clone()
+        actions = torch.tensor([0, -1, 1], device=self.image.device)
 
-        canvas = [np.zeros(self.image.shape, self.image.dtype) for _ in range(self.num_actions + 1)]
+        # canvas = [np.zeros(self.image.shape, self.image.dtype) for _ in range(self.num_actions + 1)]
         b, c, h, w = self.image.shape
-        for i in range(b):
-            canvas[0][i, 0] = self.image[i, 0]
-            canvas[self.actions['subtraction']][i, 0] = self.image[i, 0] - 5. / 255
-            canvas[self.actions['addition']][i, 0] = self.image[i, 0] + 5. / 255
+        # for i in range(b):
+        #     canvas[0][i, 0] = self.image[i, 0]
+        #     canvas[self.actions['subtraction']][i, 0] = self.image[i, 0] - 1. / 255
+        #     canvas[self.actions['addition']][i, 0] = self.image[i, 0] + 1. / 255
 
-            # if np.sum(act[i] == self.actions['box']) > 0:
-            #     canvas[self.actions['box']][i, 0] = cv2.boxFilter(self.image[i, 0], ddepth=-1, ksize=(5, 5))
+        #     # if np.sum(act[i] == self.actions['box']) > 0:
+        #     #     canvas[self.actions['box']][i, 0] = cv2.boxFilter(self.image[i, 0], ddepth=-1, ksize=(5, 5))
 
-            # if np.sum(act[i] == self.actions['bilateral']) > 0:
-            #     canvas[self.actions['bilateral']][i, 0] = cv2.bilateralFilter(self.image[i, 0], d=5, sigmaColor=0.1, sigmaSpace=5)
+        #     # if np.sum(act[i] == self.actions['bilateral']) > 0:
+        #     #     canvas[self.actions['bilateral']][i, 0] = cv2.bilateralFilter(self.image[i, 0], d=5, sigmaColor=0.1, sigmaSpace=5)
 
-            # if True:
-            #     canvas[self.actions['Gaussian']][i, 0] = cv2.GaussianBlur(self.image[i,0], ksize=(5,5), sigmaX=0.5)
+        #     # if True:
+        #     #     canvas[self.actions['Gaussian']][i, 0] = cv2.GaussianBlur(self.image[i,0], ksize=(5,5), sigmaX=0.5)
 
-            # if np.sum(act[i] == self.actions['median']) > 0:
-            #     canvas[self.actions['median']][i, 0] = cv2.medianBlur(self.image[i,0], ksize=5)
+        #     # if np.sum(act[i] == self.actions['median']) > 0:
+        #     #     canvas[self.actions['median']][i, 0] = cv2.medianBlur(self.image[i,0], ksize=5)
 
-            # if np.sum(act[i] == self.actions['Laplace']) > 0:
-            #     p = self.parameters['Laplace'][i]
-            #     k = np.array([[0, -p, 0], [-p, 1 + 4 * p, -p], [0, -p, 0]])
-            #     canvas[self.actions['Laplace']][i, 0] = cv2.filter2D(self.image[i, 0], -1, kernel=k)
+        #     # if np.sum(act[i] == self.actions['Laplace']) > 0:
+        #     #     p = self.parameters['Laplace'][i]
+        #     #     k = np.array([[0, -p, 0], [-p, 1 + 4 * p, -p], [0, -p, 0]])
+        #     #     canvas[self.actions['Laplace']][i, 0] = cv2.filter2D(self.image[i, 0], -1, kernel=k)
 
-            # if np.sum(act[i] == self.actions['unsharp']) > 0:
-            #     amount = self.parameters['unsharp'][i]
-            #     canvas[self.actions['unsharp']][i, 0] = self.image[i, 0] * (1 + amount) - canvas[self.actions['Gaussian']][i, 0] * amount
+        #     # if np.sum(act[i] == self.actions['unsharp']) > 0:
+        #     #     amount = self.parameters['unsharp'][i]
+        #     #     canvas[self.actions['unsharp']][i, 0] = self.image[i, 0] * (1 + amount) - canvas[self.actions['Gaussian']][i, 0] * amount
 
-            # if np.sum(act[i] == self.actions['Sobel_v1']) > 0:
-            #     p = self.parameters['Sobel_v1'][i]
-            #     k = np.array([[p, 0, -p], [2 * p, 1, -2 * p], [p, 0, -p]])
-            #     canvas[self.actions['Sobel_v1']][i, 0] = cv2.filter2D(self.image[i, 0], -1, kernel=k)
+        #     # if np.sum(act[i] == self.actions['Sobel_v1']) > 0:
+        #     #     p = self.parameters['Sobel_v1'][i]
+        #     #     k = np.array([[p, 0, -p], [2 * p, 1, -2 * p], [p, 0, -p]])
+        #     #     canvas[self.actions['Sobel_v1']][i, 0] = cv2.filter2D(self.image[i, 0], -1, kernel=k)
 
-            # if np.sum(act[i] == self.actions['Sobel_v2']) > 0:
-            #     p = self.parameters['Sobel_v2'][i]
-            #     k = np.array([[-p, 0, p], [-2 * p, 1, 2 * p], [-p, 0, p]])
-            #     canvas[self.actions['Sobel_v2']][i, 0] = cv2.filter2D(self.image[i, 0], -1, kernel=k)
+        #     # if np.sum(act[i] == self.actions['Sobel_v2']) > 0:
+        #     #     p = self.parameters['Sobel_v2'][i]
+        #     #     k = np.array([[-p, 0, p], [-2 * p, 1, 2 * p], [-p, 0, p]])
+        #     #     canvas[self.actions['Sobel_v2']][i, 0] = cv2.filter2D(self.image[i, 0], -1, kernel=k)
 
-            # if np.sum(act[i] == self.actions['Sobel_h1']) > 0:
-            #     p = self.parameters['Sobel_h1'][i]
-            #     k = np.array([[-p,-2 * p,-p], [0, 1, 0], [p, 2 * p, p]])
-            #     canvas[self.actions['Sobel_h1']][i, 0] = cv2.filter2D(self.image[i, 0], -1, kernel=k)
+        #     # if np.sum(act[i] == self.actions['Sobel_h1']) > 0:
+        #     #     p = self.parameters['Sobel_h1'][i]
+        #     #     k = np.array([[-p,-2 * p,-p], [0, 1, 0], [p, 2 * p, p]])
+        #     #     canvas[self.actions['Sobel_h1']][i, 0] = cv2.filter2D(self.image[i, 0], -1, kernel=k)
 
-            # if np.sum(act[i] == self.actions['Sobel_h2']) > 0:
-            #     p = self.parameters['Sobel_h2'][i]
-            #     k = np.array([[p, 2 * p, p], [0, 1, 0], [-p, -2 * p, -p]])
-            #     canvas[self.actions['Sobel_h2']][i, 0] = cv2.filter2D(self.image[i, 0], -1, kernel=k)
-        for a in range(1, self.num_actions + 1):
-            self.image = np.where(act[:, np.newaxis, :, :] == a, canvas[a], self.image)
-
-        self.image = np.clip(self.image, 0, 1)
-
+        #     # if np.sum(act[i] == self.actions['Sobel_h2']) > 0:
+        #     #     p = self.parameters['Sobel_h2'][i]
+        #     #     k = np.array([[p, 2 * p, p], [0, 1, 0], [-p, -2 * p, -p]])
+        #     #     canvas[self.actions['Sobel_h2']][i, 0] = cv2.filter2D(self.image[i, 0], -1, kernel=k)
+        # for a in range(1, self.num_actions + 1):
+        #     self.image = np.where(act[:, np.newaxis, :, :] == a, canvas[a], self.image)
+            
+        self.image = self.image + (actions[torch.tensor(act)] / 255.)[:, None, :, :]
+        self.image = torch.clamp(self.image, 0, 1)
         with torch.no_grad():
-            output = self.model(torch.from_numpy(self.image)).softmax(1)
-        
+            output = self.model(self.image.cuda()).softmax(1)
+            output1 = self.model(self.previous_image.cuda()).softmax(1)
         if self.reward_method == 'square':
             # reward = -np.square(self.ori_image - self.image) * 255 + np.array(self.loss(output, self.target))
-            reward = np.array(self.loss(output, self.target))
+            
+            reward = self.loss(torch.tensor(output).cuda(), torch.tensor(self.target).cuda())
         elif self.reward_method == 'abs':
             # reward = -np.abs(self.ori_image - self.image) * 255 + np.array(self.loss(output, self.target))
-            reward = np.array(self.loss(output, self.target))
-        plt.imshow(self.image[0, 0, :, :])
+            reward = self.loss(output.cuda(), self.target) - self.loss(output1.cuda(), self.target)
+        # if (output.argmax(1) == self.target).any().item() == False:
+        #     print("Found it!")
+        #     i = torch.nonzero(output.argmax(1) != self.target)[0]
+        #     plt.imshow(self.image[0, 0, :, :], cmap="gray")
+        #     plt.savefig("adversarial_image.png")
+        # plt.imshow(self.image[0, 0, :, :], cmap='gray')
+        # plt.savefig("Adversarial_image.png")
         return self.image, reward

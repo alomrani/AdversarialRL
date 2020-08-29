@@ -100,7 +100,7 @@ class PixelWiseA2C:
         self.past_action_entropy[self.t] = entropy
         self.past_values[self.t] = value
         self.t += 1
-        return actions.cpu().numpy()
+        return actions
 
     def act(self, pi, deterministic=True):
         if deterministic:
